@@ -42,7 +42,8 @@
     // ⚙️ CONFIG
     const SUPABASE_URL = 'https://eybscqqkusgbfmvvjbbb.supabase.co'; // GANTI URL
     const SUPABASE_ANON_KEY = 'sb_publishable_fAvutkgsk5UAXnwIz5RSPw_Z2Dk43EP'; // GANTI KEY
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const { createClient } = supabase;
+    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const { useState, useEffect, useMemo, createContext, useContext } = React;
 
     const AppContext = createContext();
@@ -58,11 +59,17 @@
 
       const handleLogin = async e => {
         e.preventDefault(); setLoading(true); setError('');
-        const {  auth, error: err } = await supabase.auth.signInWithPassword({ email, password });
-        if (err) setError(err.message);
-        else if (auth.user.app_metadata?.role !== 'super_admin') setError('Access Denied: Super Admin only.');
-        else onLogin(auth);
-        setLoading(false);
+        try {
+          const { data, error: err } = await supabaseClient.auth.signInWithPassword({ email, password });
+          if (err) throw err;
+          const { data: prof, error: profErr } = await supabaseClient.from('profiles').select('role').eq('id', data.user.id).single();
+          if (profErr || prof.role !== 'super_admin') throw new Error('Access Denied: Super Admin only.');
+          onLogin(data);
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
       };
 
       return (
@@ -92,8 +99,8 @@
 
       useEffect(() => {
         (async () => {
-          const { data: t } = await supabase.from('tenants').select('*');
-          const { data: b } = await supabase.from('reservations').select('guest_name, check_in, check_out, status, total_amount, tenant:tenants(name)').limit(10).order('created_at', { ascending: false });
+          const { data: t } = await supabaseClient.from('tenants').select('*');
+          const { data: b } = await supabaseClient.from('reservations').select('guest_name, check_in, check_out, status, total_amount, tenant:tenants(name)').limit(10).order('created_at', { ascending: false });
           setTenants(t || []);
           setBookings(b || []);
           setLoading(false);
@@ -169,12 +176,12 @@
       const [form, setForm] = useState({ name: '', plan: 'starter', contact: '', status: 'active' });
 
       useEffect(() => {
-        supabase.from('tenants').select('*').order('created_at', { ascending: false }).then(({ data }) => setTenants(data || []));
+        supabaseClient.from('tenants').select('*').order('created_at', { ascending: false }).then(({ data }) => setTenants(data || []));
       }, []);
 
       const handleSubmit = async e => {
         e.preventDefault();
-        const { error } = await supabase.from('tenants').insert([form]);
+        const { error } = await supabaseClient.from('tenants').insert([form]);
         if (!error) { setShowForm(false); setForm({ name: '', plan: 'starter', contact: '', status: 'active' }); }
       };
 
@@ -234,11 +241,33 @@
     // 👥 USER CONFIGURATION
     function UserConfiguration() {
       const [activeTab, setActiveTab] = useState('roles');
+      const [profiles, setProfiles] = useState([]);
+      const [tenants, setTenants] = useState([]);
+      const [loading, setLoading] = useState(false);
+
+      useEffect(() => {
+        if (activeTab === 'userroles') {
+          setLoading(true);
+          Promise.all([
+            supabaseClient.from('profiles').select('*, tenant:tenants(name)'),
+            supabaseClient.from('tenants').select('id, name')
+          ]).then(([p, t]) => {
+            setProfiles(p.data || []);
+            setTenants(t.data || []);
+            setLoading(false);
+          });
+        }
+      }, [activeTab]);
+
+      const updateUserRole = async (userId, role) => {
+        const { error } = await supabaseClient.from('profiles').update({ role }).eq('id', userId);
+        if (!error) setProfiles(p => p.map(u => u.id === userId ? { ...u, role } : u));
+      };
+
       const tabs = [
         { id: 'roles', label: 'Role Management' },
         { id: 'userroles', label: 'User Role Assignment' },
         { id: 'modules', label: 'Module Configuration' },
-        { id: 'menus', label: 'Menu Configuration' }
       ];
 
       return (
@@ -253,17 +282,55 @@
             {activeTab === 'roles' && (
               <div>
                 <div className="flex justify-between mb-4"><h3 className="font-semibold">Role List</h3><button className="btn btn-primary text-xs">+ Create Role</button></div>
-                <table><thead><tr><th>Role Name</th><th>Permissions</th><th>Tenant</th><th>Status</th></tr></thead>
+                <table><thead><tr><th>Role Name</th><th>Permissions</th><th>Scope</th><th>Status</th></tr></thead>
                 <tbody>
                   <tr><td className="font-medium">super_admin</td><td><span className="badge badge-blue">Full Access</span></td><td>Platform</td><td><span className="badge badge-green">Active</span></td></tr>
-                  <tr><td className="font-medium">hotel_admin</td><td><span className="badge badge-blue">Hotel Full</span></td><td>Tenant-Specific</td><td><span className="badge badge-green">Active</span></td></tr>
-                  <tr><td className="font-medium">manager</td><td><span className="badge badge-yellow">Approval & Reports</span></td><td>Tenant-Specific</td><td><span className="badge badge-green">Active</span></td></tr>
+                  <tr><td className="font-medium">hotel_admin</td><td><span className="badge badge-blue">Hotel Full</span></td><td>Tenant</td><td><span className="badge badge-green">Active</span></td></tr>
+                  <tr><td className="font-medium">receptionist</td><td><span className="badge badge-yellow">Front Office</span></td><td>Tenant</td><td><span className="badge badge-green">Active</span></td></tr>
                 </tbody></table>
               </div>
             )}
-            {activeTab === 'userroles' && <div className="text-center py-8 text-gray-500">User Role Assignment table will load here. (CRUD profiles ↔ roles)</div>}
-            {activeTab === 'modules' && <div className="text-center py-8 text-gray-500">Module Configuration table will load here. (Enable/Disable modules per tenant)</div>}
-            {activeTab === 'menus' && <div className="text-center py-8 text-gray-500">Menu Configuration tree will load here. (Parent/Child menu ordering)</div>}
+            {activeTab === 'userroles' && (
+              <div className="overflow-x-auto">
+                {loading ? <p>Loading...</p> : (
+                  <table><thead><tr><th>User Email</th><th>Hotel/Tenant</th><th>Current Role</th><th>Action</th></tr></thead>
+                  <tbody>
+                    {profiles.map(p => (
+                      <tr key={p.id}>
+                        <td>{p.id.slice(0,8)}... (User ID)</td>
+                        <td>{p.tenant?.name || 'Platform'}</td>
+                        <td><span className="badge badge-blue">{p.role}</span></td>
+                        <td>
+                          <select value={p.role} onChange={e=>updateUserRole(p.id, e.target.value)} className="text-xs p-1 border rounded">
+                            <option value="super_admin">super_admin</option>
+                            <option value="hotel_admin">hotel_admin</option>
+                            <option value="receptionist">receptionist</option>
+                            <option value="manager">manager</option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody></table>
+                )}
+              </div>
+            )}
+            {activeTab === 'modules' && (
+              <div className="space-y-4">
+                <h3 className="font-semibold">Module Configuration per Tenant</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {tenants.slice(0,4).map(t => (
+                    <div key={t.id} className="p-4 border rounded-lg flex justify-between items-center">
+                      <span>{t.name}</span>
+                      <div className="flex gap-2">
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">PMS</span>
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">POS</span>
+                        <button className="text-xs text-blue-600">Edit</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       );
@@ -272,7 +339,15 @@
     // 💳 SUBSCRIPTION CONFIG
     function SubscriptionConfig() {
       const [activeTab, setActiveTab] = useState('plans');
-      const plans = [
+      const [plans, setPlans] = useState([]);
+      const [payments, setPayments] = useState([]);
+
+      useEffect(() => {
+        supabaseClient.from('saas_plans').select('*').then(({data})=>setPlans(data||[]));
+        supabaseClient.from('saas_payments').select('*, tenant:tenants(name)').then(({data})=>setPayments(data||[]));
+      }, [activeTab]);
+
+      const defaultPlans = [
         { name: 'Starter', price: 299000, rooms: 20, features: 'Basic Front Office' },
         { name: 'Pro', price: 899000, rooms: 100, features: 'Full PMS + F&B POS' },
         { name: 'Enterprise', price: 2500000, rooms: 'Unlimited', features: 'All Modules + API' }
@@ -282,19 +357,18 @@
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-gray-800">Subscription Configuration</h2>
           <div className="flex border-b gap-2">
-            {['plans', 'cart', 'payments'].map(t => (
+            {['plans', 'payments'].map(t => (
               <button key={t} onClick={() => setActiveTab(t)} className={`px-4 py-2 text-sm font-medium border-b-2 capitalize ${activeTab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>{t} Management</button>
             ))}
           </div>
           <div className="card p-5">
             {activeTab === 'plans' && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {plans.map((p, i) => (
+                {(plans.length ? plans : defaultPlans).map((p, i) => (
                   <div key={i} className="border border-gray-200 rounded-lg p-4 flex flex-col">
                     <h3 className="font-bold text-lg">{p.name}</h3>
                     <p className="text-2xl font-bold text-blue-600 my-2">{formatCurrency(p.price)}<span className="text-sm text-gray-500 font-normal">/month</span></p>
                     <p className="text-sm text-gray-600 mb-4">{p.features}</p>
-                    <p className="text-xs text-gray-500 mb-4">Max Rooms: {p.rooms}</p>
                     <div className="mt-auto flex gap-2">
                       <button className="btn btn-outline flex-1 text-xs">Edit</button>
                       <button className="btn btn-danger flex-1 text-xs">Delete</button>
@@ -303,8 +377,23 @@
                 ))}
               </div>
             )}
-            {activeTab === 'cart' && <div className="text-center py-8 text-gray-500">Cart configuration & hotel upgrade requests will appear here.</div>}
-            {activeTab === 'payments' && <div className="text-center py-8 text-gray-500">Approved payment logs & invoice generation will appear here.</div>}
+            {activeTab === 'payments' && (
+              <div className="overflow-x-auto">
+                <table><thead><tr><th>Date</th><th>Tenant</th><th>Plan</th><th>Amount</th><th>Status</th></tr></thead>
+                <tbody>
+                  {payments.map(p => (
+                    <tr key={p.id}>
+                      <td>{formatDate(p.created_at)}</td>
+                      <td>{p.tenant?.name}</td>
+                      <td>{p.plan_name}</td>
+                      <td className="font-bold">{formatCurrency(p.amount)}</td>
+                      <td><span className={`badge ${p.status==='paid'?'badge-green':'badge-yellow'}`}>{p.status}</span></td>
+                    </tr>
+                  ))}
+                  {payments.length===0 && <tr><td colSpan="5" className="text-center py-8 text-gray-400">No payment records found.</td></tr>}
+                </tbody></table>
+              </div>
+            )}
           </div>
         </div>
       );
@@ -313,32 +402,56 @@
     // 📈 REPORTS & LOGS
     function ReportsAndLogs() {
       const [activeTab, setActiveTab] = useState('logs');
+      const [logs, setLogs] = useState([]);
+      const [sales, setSales] = useState([]);
+
+      useEffect(() => {
+        if (activeTab === 'logs') supabaseClient.from('audit_logs').select('*, tenant:tenants(name)').limit(50).order('created_at', {ascending:false}).then(({data})=>setLogs(data||[]));
+        if (activeTab === 'sales') supabaseClient.from('sales').select('*, tenant:tenants(name)').limit(50).order('created_at', {ascending:false}).then(({data})=>setSales(data||[]));
+      }, [activeTab]);
       
       return (
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-gray-800">Reports & Audit Logs</h2>
           <div className="flex border-b gap-2 flex-wrap">
-            {['logs', 'subscription', 'sales', 'cost'].map(t => (
+            {['logs', 'sales', 'subscription'].map(t => (
               <button key={t} onClick={() => setActiveTab(t)} className={`px-4 py-2 text-sm font-medium border-b-2 capitalize ${activeTab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>{t} Report</button>
             ))}
           </div>
           <div className="card p-5">
             {activeTab === 'logs' && (
-              <div>
-                <div className="flex gap-3 mb-4">
-                  <select className="w-auto"><option>Semua Klien</option><option>Grand Horizon</option></select>
-                  <input type="date" className="w-auto" />
-                  <button className="btn btn-outline">Refresh</button>
-                  <button className="btn btn-outline">Export CSV</button>
-                </div>
+              <div className="overflow-x-auto">
                 <table><thead><tr><th>Timestamp</th><th>Klien</th><th>Aktor</th><th>Aksi</th><th>Detail</th></tr></thead>
                 <tbody>
-                  <tr><td>2024-10-25 14:30</td><td>Grand Horizon</td><td>admin@gh.com</td><td>Reservation Created</td><td>Guest: Budi S.</td></tr>
-                  <tr><td>2024-10-25 14:25</td><td>Grand Horizon</td><td>system</td><td>Auto-Post Room Charge</td><td>Night Audit Batch</td></tr>
+                  {logs.map(l => (
+                    <tr key={l.id}>
+                      <td>{formatDate(l.created_at)}</td>
+                      <td>{l.tenant?.name}</td>
+                      <td>{l.actor_email}</td>
+                      <td><span className="badge badge-blue">{l.action}</span></td>
+                      <td>{l.details}</td>
+                    </tr>
+                  ))}
+                  {logs.length===0 && <tr><td colSpan="5" className="text-center py-8 text-gray-400">No logs found.</td></tr>}
                 </tbody></table>
               </div>
             )}
-            {activeTab !== 'logs' && <div className="text-center py-8 text-gray-500">{activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Report generator will load here.</div>}
+            {activeTab === 'sales' && (
+              <div className="overflow-x-auto">
+                <table><thead><tr><th>Date</th><th>Tenant</th><th>Total Amount</th><th>Items</th></tr></thead>
+                <tbody>
+                  {sales.map(s => (
+                    <tr key={s.id}>
+                      <td>{formatDate(s.created_at)}</td>
+                      <td>{s.tenant?.name}</td>
+                      <td className="font-bold">{formatCurrency(s.total_amount)}</td>
+                      <td>{s.items?.length} items</td>
+                    </tr>
+                  ))}
+                </tbody></table>
+              </div>
+            )}
+            {activeTab === 'subscription' && <div className="text-center py-8 text-gray-500">Subscription growth report coming soon.</div>}
           </div>
         </div>
       );
@@ -395,17 +508,29 @@
     // 🚀 APP
     function App() {
       const [session, setSession] = useState(null);
+      const [profile, setProfile] = useState(null);
       const [view, setView] = useState('dashboard');
       const [loading, setLoading] = useState(true);
 
       useEffect(() => {
-        supabase.auth.getSession().then(({  { session: s } }) => {
-          if (s?.user?.app_metadata?.role === 'super_admin') setSession(s);
-          setLoading(false);
+        supabaseClient.auth.getSession().then(({ data: { session: s } }) => {
+          if (s) loadUser(s);
+          else setLoading(false);
         });
+        const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((_, s) => s ? loadUser(s) : (setSession(null), setProfile(null)));
+        return () => subscription.unsubscribe();
       }, []);
 
-      const handleLogout = () => supabase.auth.signOut().then(() => setSession(null));
+      const loadUser = async s => {
+        const { data: prof } = await supabaseClient.from('profiles').select('role').eq('id', s.user.id).single();
+        if (prof && prof.role === 'super_admin') {
+          setSession(s);
+          setProfile(prof);
+        }
+        setLoading(false);
+      };
+
+      const handleLogout = () => supabaseClient.auth.signOut().then(() => setSession(null));
 
       if (loading) return <div className="flex h-screen items-center justify-center">Loading Admin Console...</div>;
       if (!session) return <LoginPage onLogin={s => setSession(s)} />;

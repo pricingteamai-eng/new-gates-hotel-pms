@@ -182,6 +182,115 @@
       );
     }
 
+    // 🧹 HOUSEKEEPING
+    function Housekeeping({ showToast }) {
+      const { tenant } = useContext(AppContext);
+      const [rooms, setRooms] = useState([]);
+
+      useEffect(() => {
+        supabaseClient.from('rooms').select('*').eq('tenant_id', tenant.id).order('room_number').then(({data})=>setRooms(data||[]));
+      }, []);
+
+      const updateStatus = async (id, status) => {
+        const { error } = await supabaseClient.from('rooms').update({ status }).eq('id', id);
+        if(!error) {
+          showToast('Room status updated','success');
+          setRooms(p=>p.map(r=>r.id===id?{...r,status}:r));
+        }
+      };
+
+      return (
+        <div className="space-y-6">
+          <h2 className="text-xl font-bold">Housekeeping Management</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {rooms.map(r=>(
+              <div key={r.id} className="card flex flex-col items-center text-center">
+                <span className="text-2xl mb-1">🚪</span>
+                <div className="font-bold">#{r.room_number}</div>
+                <div className="text-xs text-gray-500 mb-3">{r.room_type_id}</div>
+                <select
+                  value={r.status}
+                  onChange={e=>updateStatus(r.id, e.target.value)}
+                  className={`text-xs p-1 rounded ${r.status==='dirty'?'bg-red-100 text-red-700':r.status==='available'?'bg-green-100 text-green-700':'bg-blue-100 text-blue-700'}`}
+                >
+                  <option value="available">Available</option>
+                  <option value="occupied">Occupied</option>
+                  <option value="dirty">Dirty</option>
+                  <option value="out_of_order">Out of Order</option>
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // 🍽️ F&B POS
+    function POS({ showToast }) {
+      const { tenant } = useContext(AppContext);
+      const [articles, setArticles] = useState([]);
+      const [cart, setCart] = useState([]);
+
+      useEffect(() => {
+        supabaseClient.from('articles').select('*').eq('tenant_id', tenant.id).then(({data})=>setArticles(data||[]));
+      }, []);
+
+      const addToCart = (item) => {
+        setCart(p=>{
+          const exists = p.find(i=>i.id===item.id);
+          if(exists) return p.map(i=>i.id===item.id?{...i, qty: i.qty+1}:i);
+          return [...p, {...item, qty:1}];
+        });
+      };
+
+      const checkout = async () => {
+        const total = cart.reduce((a,b)=>a+(b.price*b.qty),0);
+        const { error } = await supabaseClient.from('sales').insert([{
+          tenant_id: tenant.id,
+          items: cart,
+          total_amount: total
+        }]);
+        if(!error) {
+          showToast('Order successful','success');
+          setCart([]);
+        }
+      };
+
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:col-span-2 space-y-4">
+            <h2 className="text-xl font-bold">F&B POS</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {articles.map(a=>(
+                <button key={a.id} onClick={()=>addToCart(a)} className="card hover:border-blue-500 text-left">
+                  <div className="font-bold">{a.name}</div>
+                  <div className="text-blue-600 font-semibold">{formatCurrency(a.price)}</div>
+                </button>
+              ))}
+              {articles.length===0 && <div className="col-span-full text-center py-12 text-gray-400 card">No articles found. Add some in Settings > Articles.</div>}
+            </div>
+          </div>
+          <div className="card h-fit sticky top-8">
+            <h3 className="font-bold mb-4 border-b pb-2">Order Summary</h3>
+            <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
+              {cart.map(i=>(
+                <div key={i.id} className="flex justify-between text-sm">
+                  <span>{i.name} x{i.qty}</span>
+                  <span>{formatCurrency(i.price*i.qty)}</span>
+                </div>
+              ))}
+              {cart.length===0 && <div className="text-gray-400 text-center py-4">Cart is empty</div>}
+            </div>
+            <div className="border-t pt-2 mb-4 flex justify-between font-bold">
+              <span>Total</span>
+              <span>{formatCurrency(cart.reduce((a,b)=>a+(b.price*b.qty),0))}</span>
+            </div>
+            <button onClick={checkout} disabled={cart.length===0} className="btn btn-primary w-full">Checkout</button>
+          </div>
+        </div>
+      );
+    }
+
     // 📅 RESERVATION LIST
     function ReservationList({ onNew }) {
       const { tenant } = useContext(AppContext);
@@ -214,13 +323,23 @@
       const [tab, setTab] = useState('rooms');
       const [rooms, setRooms] = useState([]);
       const [ratePlans, setRatePlans] = useState([]);
+      const [segments, setSegments] = useState([]);
+      const [articles, setArticles] = useState([]);
+      const [taxServices, setTaxServices] = useState([]);
+
       const [newRoom, setNewRoom] = useState({ room_number:'', room_type_id:'', floor_number:1, status:'available' });
       const [newRate, setNewRate] = useState({ name:'', alias:'', details:'[]' });
+      const [newSegment, setNewSegment] = useState({ name:'' });
+      const [newArticle, setNewArticle] = useState({ name:'', price:0, category:'F&B' });
+      const [newTax, setNewTax] = useState({ name:'', percentage:0 });
 
       useEffect(() => {
-        supabaseClient.from('rooms').select('*').eq('tenant_id', tenant.id).then(({data})=>setRooms(data||[]));
-        supabaseClient.from('rate_plans').select('*').eq('tenant_id', tenant.id).then(({data})=>setRatePlans(data||[]));
-      }, []);
+        if (tab==='rooms') supabaseClient.from('rooms').select('*').eq('tenant_id', tenant.id).then(({data})=>setRooms(data||[]));
+        if (tab==='rate_plans') supabaseClient.from('rate_plans').select('*').eq('tenant_id', tenant.id).then(({data})=>setRatePlans(data||[]));
+        if (tab==='segments') supabaseClient.from('segments').select('*').eq('tenant_id', tenant.id).then(({data})=>setSegments(data||[]));
+        if (tab==='articles') supabaseClient.from('articles').select('*').eq('tenant_id', tenant.id).then(({data})=>setArticles(data||[]));
+        if (tab==='tax_service') supabaseClient.from('tax_services').select('*').eq('tenant_id', tenant.id).then(({data})=>setTaxServices(data||[]));
+      }, [tab]);
 
       const addRoom = async () => {
         const { error } = await supabaseClient.from('rooms').insert([{...newRoom, tenant_id: tenant.id}]);
@@ -230,11 +349,23 @@
         const { error } = await supabaseClient.from('rate_plans').insert([{...newRate, tenant_id: tenant.id}]);
         if(!error) { showToast('Rate Plan added','success'); setRatePlans(p=>[...p, {...newRate, id:Date.now()}]); }
       };
+      const addSegment = async () => {
+        const { error } = await supabaseClient.from('segments').insert([{...newSegment, tenant_id: tenant.id}]);
+        if(!error) { showToast('Segment added','success'); setSegments(p=>[...p, {...newSegment, id:Date.now()}]); }
+      };
+      const addArticle = async () => {
+        const { error } = await supabaseClient.from('articles').insert([{...newArticle, tenant_id: tenant.id}]);
+        if(!error) { showToast('Article added','success'); setArticles(p=>[...p, {...newArticle, id:Date.now()}]); }
+      };
+      const addTax = async () => {
+        const { error } = await supabaseClient.from('tax_services').insert([{...newTax, tenant_id: tenant.id}]);
+        if(!error) { showToast('Tax/Service added','success'); setTaxServices(p=>[...p, {...newTax, id:Date.now()}]); }
+      };
 
       return (
         <div className="space-y-6">
-          <div className="flex gap-2 border-b pb-2">
-            {['rooms','rate_plans','segments','articles','tax_service'].map(t=><button key={t} onClick={()=>setTab(t)} className={`px-4 py-2 text-sm font-medium capitalize ${tab===t?'text-blue-600 border-b-2 border-blue-600':'text-gray-500'}`}>{t.replace('_',' ')}</button>)}
+          <div className="flex gap-2 border-b pb-2 overflow-x-auto">
+            {['rooms','rate_plans','segments','articles','tax_service'].map(t=><button key={t} onClick={()=>setTab(t)} className={`px-4 py-2 text-sm font-medium whitespace-nowrap capitalize ${tab===t?'text-blue-600 border-b-2 border-blue-600':'text-gray-500'}`}>{t.replace('_',' ')}</button>)}
           </div>
           {tab==='rooms' && <div className="card"><h3 className="font-bold mb-4">Room Inventory</h3><div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             <input placeholder="Room Number" value={newRoom.room_number} onChange={e=>setNewRoom(p=>({...p,room_number:e.target.value}))} />
@@ -247,9 +378,21 @@
             <input placeholder="Alias (e.g. RB)" value={newRate.alias} onChange={e=>setNewRate(p=>({...p,alias:e.target.value}))} />
             <button onClick={addRate} className="btn btn-primary">Add Plan</button>
           </div><div className="space-y-2">{ratePlans.map(p=><div key={p.id} className="flex justify-between p-3 bg-gray-50 rounded"><span className="font-medium">{p.name} ({p.alias})</span><span className="text-xs text-gray-500">Active</span></div>)}</div></div>}
-          {tab==='segments' && <div className="card"><p className="text-gray-500">Market Segmentation module coming soon.</p></div>}
-          {tab==='articles' && <div className="card"><p className="text-gray-500">Article Payment & Sales configuration coming soon.</p></div>}
-          {tab==='tax_service' && <div className="card"><p className="text-gray-500">Tax & Service configuration coming soon.</p></div>}
+          {tab==='segments' && <div className="card"><h3 className="font-bold mb-4">Market Segments</h3><div className="flex gap-4 mb-4">
+            <input placeholder="Segment Name" value={newSegment.name} onChange={e=>setNewSegment({name:e.target.value})} />
+            <button onClick={addSegment} className="btn btn-primary">Add</button>
+          </div><div className="space-y-2">{segments.map(s=><div key={s.id} className="p-3 bg-gray-50 rounded">{s.name}</div>)}</div></div>}
+          {tab==='articles' && <div className="card"><h3 className="font-bold mb-4">Articles (F&B / Services)</h3><div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <input placeholder="Name" value={newArticle.name} onChange={e=>setNewArticle(p=>({...p,name:e.target.value}))} />
+            <input type="number" placeholder="Price" value={newArticle.price} onChange={e=>setNewArticle(p=>({...p,price:parseFloat(e.target.value)}))} />
+            <select value={newArticle.category} onChange={e=>setNewArticle(p=>({...p,category:e.target.value}))}><option>F&B</option><option>Service</option><option>Other</option></select>
+            <button onClick={addArticle} className="btn btn-primary">Add</button>
+          </div><div className="space-y-2">{articles.map(a=><div key={a.id} className="flex justify-between p-3 bg-gray-50 rounded"><span>{a.name} ({a.category})</span><span className="font-bold">{formatCurrency(a.price)}</span></div>)}</div></div>}
+          {tab==='tax_service' && <div className="card"><h3 className="font-bold mb-4">Tax & Service</h3><div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <input placeholder="Name" value={newTax.name} onChange={e=>setNewTax(p=>({...p,name:e.target.value}))} />
+            <input type="number" placeholder="Percentage" value={newTax.percentage} onChange={e=>setNewTax(p=>({...p,percentage:parseFloat(e.target.value)}))} />
+            <button onClick={addTax} className="btn btn-primary">Add</button>
+          </div><div className="space-y-2">{taxServices.map(t=><div key={t.id} className="flex justify-between p-3 bg-gray-50 rounded"><span>{t.name}</span><span className="font-bold">{t.percentage}%</span></div>)}</div></div>}
         </div>
       );
     }
@@ -319,8 +462,9 @@
             {view==='dashboard' && <Dashboard showToast={showToast} />}
             {view==='reservations' && <ReservationList onNew={()=>setView('res_form')} />}
             {view==='res_form' && <ReservationForm onSave={()=>setView('reservations')} />}
+            {view==='housekeeping' && <Housekeeping showToast={showToast} />}
+            {view==='pos' && <POS showToast={showToast} />}
             {view==='settings' && <Settings showToast={showToast} />}
-            {['housekeeping','pos'].includes(view) && <div className="text-center py-12 text-gray-400">Module coming soon</div>}
           </Layout>
         </AppContext.Provider>
       );
