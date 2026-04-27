@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>New Gates Hotel PMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; background-color: #F2F2F7; }
+    .card { @apply bg-white rounded-xl shadow-sm border border-gray-100 p-5 transition hover:shadow-md; }
+    .btn { @apply px-4 py-2.5 rounded-lg font-medium transition flex items-center justify-center gap-2 disabled:opacity-50 text-sm; }
+    .btn-primary { @apply bg-blue-600 text-white hover:bg-blue-700; }
+    .btn-success { @apply bg-green-600 text-white hover:bg-green-700; }
+    .btn-outline { @apply border border-gray-300 text-gray-700 hover:bg-gray-50; }
+    .btn-danger { @apply bg-red-50 text-red-600 hover:bg-red-100; }
+    .badge { @apply px-2 py-1 rounded-full text-xs font-semibold; }
+    .badge-green { @apply bg-green-100 text-green-800; }
+    .badge-red { @apply bg-red-100 text-red-800; }
+    .badge-yellow { @apply bg-yellow-100 text-yellow-800; }
+    .badge-blue { @apply bg-blue-100 text-blue-800; }
+    input, select, textarea { @apply w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500; }
+    label { @apply block text-xs font-semibold text-gray-500 mb-1 uppercase; }
+    .toast { @apply fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg text-white z-50 animate-fade-in text-sm font-medium; }
+    @keyframes fade-in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+    .animate-fade-in { animation: fade-in 0.3s ease-out; }
+  </style>
+</head>
+<body class="min-h-screen text-gray-800">
+  <div id="root"></div>
+  <script type="text/babel">
+    const SUPABASE_URL = 'https://eybscqqkusgbfmvvjbbb.supabase.co'; // GANTI URL ANDA
+    const SUPABASE_ANON_KEY = 'sb_publishable_fAvutkgsk5UAXnwIz5RSPw_Z2Dk43EP'; // GANTI KEY ANDA
+    const DEMO_TENANT_ID = '00000000-0000-0000-0000-000000000001';
+
+    const { createClient } = supabase;
+    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const { useState, useEffect, useMemo, createContext, useContext } = React;
+
+    const AppContext = createContext();
+    const formatCurrency = v => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(v || 0);
+    const formatDate = d => d ? new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
+
+    function Toast({ msg, type, onClose }) {
+      useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t); }, []);
+      return <div className={`toast ${type==='error'?'bg-red-600':'bg-green-600'}`}>{msg}</div>;
+    }
+
+    // 🔐 LOGIN
+    function LoginPage({ onLogin }) {
+      const [hotels, setHotels] = useState([]);
+      const [hotel, setHotel] = useState('');
+      const [email, setEmail] = useState('');
+      const [pass, setPass] = useState('');
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState('');
+
+      useEffect(() => {
+        supabaseClient.from('tenants').select('id, name').eq('is_active', true).then(({ data }) => setHotels(data || []));
+      }, []);
+
+      const handleSubmit = async e => {
+        e.preventDefault();
+        if(!hotel) return setError('Pilih hotel');
+        setLoading(true); setError('');
+        try {
+          const { data: auth, error: authErr } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
+          if(authErr) throw authErr;
+          const { data: prof, error: profErr } = await supabaseClient.from('profiles').select('tenant_id, role').eq('id', auth.user.id).single();
+          if(profErr) throw new Error('Profile tidak ditemukan');
+          if(prof.role !== 'super_admin' && prof.tenant_id !== hotel) throw new Error('Tidak punya akses ke hotel ini');
+          onLogin(auth, prof, hotel);
+        } catch(err) { setError(err.message); }
+        finally { setLoading(false); }
+      };
+
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100">
+          <div className="card w-full max-w-md p-8">
+            <h1 className="text-3xl font-bold text-center text-blue-600 mb-2">🏨 New Gates</h1>
+            <p className="text-center text-gray-500 mb-6">Hotel Management System</p>
+            {error && <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm">{error}</div>}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div><label>Pilih Hotel</label><select value={hotel} onChange={e=>setHotel(e.target.value)} required>{hotels.map(h=><option key={h.id} value={h.id}>{h.name}</option>)}</select></div>
+              <div><label>Email</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} required /></div>
+              <div><label>Password</label><input type="password" value={pass} onChange={e=>setPass(e.target.value)} required /></div>
+              <button type="submit" disabled={loading} className="btn btn-primary w-full">{loading?'Loading...':'Masuk'}</button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // 📊 DASHBOARD
+    function Dashboard({ showToast }) {
+      const { tenant } = useContext(AppContext);
+      const [stats, setStats] = useState({ total:0, occ:0, rev:0 });
+      const [bookings, setBookings] = useState([]);
+      
+      useEffect(() => {
+        (async () => {
+          const { data: rooms } = await supabaseClient.from('rooms').select('status').eq('tenant_id', tenant.id);
+          const occ = rooms?.filter(r=>r.status==='occupied').length || 0;
+          const today = new Date().toISOString().split('T')[0];
+          const { data: res } = await supabaseClient.from('reservations').select('guest_name, total_amount, check_in, status').eq('tenant_id', tenant.id).gte('check_in', today).limit(5);
+          setStats({ total: rooms?.length||0, occ, rev: res?.reduce((a,b)=>a+(b.total_amount||0),0)||0 });
+          setBookings(res||[]);
+        })();
+      }, []);
+
+      return (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="card flex items-center gap-4"><div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xl">🛏️</div><div><p className="text-xs font-semibold text-gray-500 uppercase">Total Kamar</p><p className="text-2xl font-bold">{stats.total}</p></div></div>
+            <div className="card flex items-center gap-4"><div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-xl">📊</div><div><p className="text-xs font-semibold text-gray-500 uppercase">Occupancy</p><p className="text-2xl font-bold">{stats.total?Math.round(occ/stats.total*100):0}%</p></div></div>
+            <div className="card flex items-center gap-4"><div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center text-xl">💰</div><div><p className="text-xs font-semibold text-gray-500 uppercase">Revenue Today</p><p className="text-xl font-bold">{formatCurrency(stats.rev)}</p></div></div>
+          </div>
+          <div className="card"><h3 className="font-bold mb-4">Recent Bookings</h3><div className="space-y-3">{bookings.map((b,i)=><div key={i} className="flex justify-between p-3 bg-gray-50 rounded"><span className="font-medium">{b.guest_name}</span><span className={`badge ${b.status==='checked_in'?'badge-green':'badge-blue'}`}>{b.status}</span></div>)}</div></div>
+          <div className="card"><h3 className="font-bold mb-4">Channel Manager Status</h3><div className="grid grid-cols-2 md:grid-cols-4 gap-4">{['Traveloka','Agoda','Booking.com','Tiket.com'].map(o=><div key={o} className="flex justify-between p-3 border rounded"><span>{o}</span><span className="w-2 h-2 rounded-full bg-green-500 mt-2"></span></div>)}</div></div>
+        </div>
+      );
+    }
+
+    // 📝 RESERVATION FORM
+    function ReservationForm({ onSave }) {
+      const { tenant } = useContext(AppContext);
+      const [form, setForm] = useState({ quantity:1, room_type:'', reserve_name:'', guest_name:'', room_number:'', id_card_number:'', address_country:'Indonesia', address_province:'', address_city:'', address_postal:'', address_detail:'', birth_date:'', phone:'', email:'', adult_count:1, child_count:0, check_in:'', check_out:'', total_nights:0, eta:'', etd:'', room_rate:0, extra_bed_count:0, rate_plan:'', segment:'Leisure', deposit_amount:0, status:'confirmed', comment:'', document_url:'' });
+      const [loading, setLoading] = useState(false);
+
+      const update = (k,v) => {
+        setForm(p=>({...p,[k]:v}));
+        if(k==='check_in'||k==='check_out') setTimeout(()=>{
+          if(form.check_in&&form.check_out) setForm(p=>({...p, total_nights: Math.max(0, (new Date(form.check_out)-new Date(form.check_in))/(1000*60*60*24))}));
+        },0);
+      };
+
+      const submit = async e => {
+        e.preventDefault(); setLoading(true);
+        try {
+          const total = form.room_rate * form.total_nights + form.deposit_amount;
+          const { error } = await supabaseClient.from('reservations').insert([{...form, tenant_id: tenant.id, total_amount: total}]);
+          if(error) throw error;
+          showToast('Reservasi berhasil!','success'); onSave();
+        } catch(err) { showToast(err.message,'error'); }
+        finally { setLoading(false); }
+      };
+
+      return (
+        <form onSubmit={submit} className="space-y-6">
+          <div className="flex justify-between"><h2 className="text-xl font-bold">Create Reservation</h2><button type="button" onClick={onSave} className="btn btn-outline">Discard</button></div>
+          <div className="card"><h3 className="font-bold text-blue-600 mb-4 border-b pb-2">1. Guest Information</h3><div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div><label>Guest Name *</label><input value={form.guest_name} onChange={e=>update('guest_name',e.target.value)} required /></div>
+            <div><label>Reserve Name</label><input value={form.reserve_name} onChange={e=>update('reserve_name',e.target.value)} /></div>
+            <div><label>ID Card</label><input value={form.id_card_number} onChange={e=>update('id_card_number',e.target.value)} /></div>
+            <div><label>Phone</label><input type="tel" value={form.phone} onChange={e=>update('phone',e.target.value)} /></div>
+            <div><label>Email</label><input type="email" value={form.email} onChange={e=>update('email',e.target.value)} /></div>
+            <div><label>Birth Date</label><input type="date" value={form.birth_date} onChange={e=>update('birth_date',e.target.value)} /></div>
+            <div><label>Country</label><input value={form.address_country} onChange={e=>update('address_country',e.target.value)} /></div>
+            <div><label>Province</label><input value={form.address_province} onChange={e=>update('address_province',e.target.value)} /></div>
+            <div><label>City</label><input value={form.address_city} onChange={e=>update('address_city',e.target.value)} /></div>
+            <div className="md:col-span-3"><label>Detail Address</label><textarea rows="2" value={form.address_detail} onChange={e=>update('address_detail',e.target.value)}></textarea></div>
+            <div><label>Adults</label><input type="number" value={form.adult_count} onChange={e=>update('adult_count',e.target.value)} /></div>
+            <div><label>Children</label><input type="number" value={form.child_count} onChange={e=>update('child_count',e.target.value)} /></div>
+          </div></div>
+          <div className="card"><h3 className="font-bold text-blue-600 mb-4 border-b pb-2">2. Stay Details</h3><div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div><label>Check-In *</label><input type="date" value={form.check_in} onChange={e=>update('check_in',e.target.value)} required /></div>
+            <div><label>Check-Out *</label><input type="date" value={form.check_out} onChange={e=>update('check_out',e.target.value)} required /></div>
+            <div><label>Total Nights</label><input type="number" value={form.total_nights} readOnly className="bg-gray-100" /></div>
+            <div><label>Segment</label><select value={form.segment} onChange={e=>update('segment',e.target.value)}><option>Leisure</option><option>Corporate</option><option>Group</option><option>OTA</option><option>Walk-in</option></select></div>
+            <div><label>Room Type</label><select value={form.room_type} onChange={e=>update('room_type',e.target.value)}><option>Standard</option><option>Deluxe</option><option>Suite</option></select></div>
+            <div><label>Room Rate</label><input type="number" value={form.room_rate} onChange={e=>update('room_rate',parseFloat(e.target.value))} /></div>
+            <div><label>Rate Plan</label><select value={form.rate_plan} onChange={e=>update('rate_plan',e.target.value)}><option>Room Only</option><option>Room Breakfast</option><option>Full Board</option></select></div>
+            <div><label>ETA</label><input type="time" value={form.eta} onChange={e=>update('eta',e.target.value)} /></div>
+            <div className="md:col-span-2"><label>Comment</label><textarea rows="2" value={form.comment} onChange={e=>update('comment',e.target.value)}></textarea></div>
+          </div></div>
+          <div className="card flex justify-end gap-3"><button type="submit" disabled={loading} className="btn btn-primary px-8">{loading?'Saving...':'Save Reservation'}</button></div>
+        </form>
+      );
+    }
+
+    // 📅 RESERVATION LIST
+    function ReservationList({ onNew }) {
+      const { tenant } = useContext(AppContext);
+      const [list, setList] = useState([]);
+      const [filter, setFilter] = useState('all');
+      
+      useEffect(() => {
+        supabaseClient.from('reservations').select('*').eq('tenant_id', tenant.id).order('check_in',{ascending:true}).then(({data})=>setList(data||[]));
+      }, []);
+
+      const filtered = filter==='all' ? list : list.filter(r=>r.status===filter);
+
+      return (
+        <div className="card overflow-hidden">
+          <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+            <h2 className="text-xl font-bold">Reservations</h2>
+            <div className="flex gap-2">
+              {['all','confirmed','checked_in','checked_out'].map(f=><button key={f} onClick={()=>setFilter(f)} className={`px-3 py-1 rounded text-xs font-medium capitalize ${filter===f?'bg-blue-600 text-white':'bg-gray-100'}`}>{f.replace('_',' ')}</button>)}
+              <button onClick={onNew} className="btn btn-primary ml-auto">+ New</button>
+            </div>
+          </div>
+          <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-gray-50"><tr><th className="p-3">Guest</th><th className="p-3">Check-In</th><th className="p-3">Check-Out</th><th className="p-3">Room</th><th className="p-3">Rate</th><th className="p-3">Status</th></tr></thead><tbody>{filtered.map(r=><tr key={r.id} className="border-b hover:bg-gray-50"><td className="p-3 font-medium">{r.guest_name}</td><td className="p-3">{formatDate(r.check_in)}</td><td className="p-3">{formatDate(r.check_out)}</td><td className="p-3">#{r.room_number||'-'}<br/><span className="text-xs text-gray-400">{r.room_type}</span></td><td className="p-3">{formatCurrency(r.room_rate)}</td><td className="p-3"><span className={`badge ${r.status==='checked_in'?'badge-green':r.status==='confirmed'?'badge-blue':'badge-yellow'}`}>{r.status}</span></td></tr>)}</tbody></table></div>
+        </div>
+      );
+    }
+
+    // ⚙️ SETTINGS MODULE
+    function Settings({ showToast }) {
+      const { tenant } = useContext(AppContext);
+      const [tab, setTab] = useState('rooms');
+      const [rooms, setRooms] = useState([]);
+      const [ratePlans, setRatePlans] = useState([]);
+      const [newRoom, setNewRoom] = useState({ room_number:'', room_type_id:'', floor_number:1, status:'available' });
+      const [newRate, setNewRate] = useState({ name:'', alias:'', details:'[]' });
+
+      useEffect(() => {
+        supabaseClient.from('rooms').select('*').eq('tenant_id', tenant.id).then(({data})=>setRooms(data||[]));
+        supabaseClient.from('rate_plans').select('*').eq('tenant_id', tenant.id).then(({data})=>setRatePlans(data||[]));
+      }, []);
+
+      const addRoom = async () => {
+        const { error } = await supabaseClient.from('rooms').insert([{...newRoom, tenant_id: tenant.id}]);
+        if(!error) { showToast('Room added','success'); setRooms(p=>[...p, {...newRoom, id:Date.now()}]); }
+      };
+      const addRate = async () => {
+        const { error } = await supabaseClient.from('rate_plans').insert([{...newRate, tenant_id: tenant.id}]);
+        if(!error) { showToast('Rate Plan added','success'); setRatePlans(p=>[...p, {...newRate, id:Date.now()}]); }
+      };
+
+      return (
+        <div className="space-y-6">
+          <div className="flex gap-2 border-b pb-2">
+            {['rooms','rate_plans','segments','articles','tax_service'].map(t=><button key={t} onClick={()=>setTab(t)} className={`px-4 py-2 text-sm font-medium capitalize ${tab===t?'text-blue-600 border-b-2 border-blue-600':'text-gray-500'}`}>{t.replace('_',' ')}</button>)}
+          </div>
+          {tab==='rooms' && <div className="card"><h3 className="font-bold mb-4">Room Inventory</h3><div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <input placeholder="Room Number" value={newRoom.room_number} onChange={e=>setNewRoom(p=>({...p,room_number:e.target.value}))} />
+            <select value={newRoom.room_type_id} onChange={e=>setNewRoom(p=>({...p,room_type_id:e.target.value}))}><option value="">Select Type</option><option value="Standard">Standard</option><option value="Deluxe">Deluxe</option><option value="Suite">Suite</option></select>
+            <input type="number" placeholder="Floor" value={newRoom.floor_number} onChange={e=>setNewRoom(p=>({...p,floor_number:e.target.value}))} />
+            <button onClick={addRoom} className="btn btn-primary">Add Room</button>
+          </div><div className="grid grid-cols-2 md:grid-cols-4 gap-3">{rooms.map(r=><div key={r.id} className="p-3 border rounded"><div className="font-bold">#{r.room_number}</div><div className="text-xs text-gray-500">{r.room_type_id} • Floor {r.floor_number}</div></div>)}</div></div>}
+          {tab==='rate_plans' && <div className="card"><h3 className="font-bold mb-4">Rate Plans</h3><div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <input placeholder="Plan Name" value={newRate.name} onChange={e=>setNewRate(p=>({...p,name:e.target.value}))} />
+            <input placeholder="Alias (e.g. RB)" value={newRate.alias} onChange={e=>setNewRate(p=>({...p,alias:e.target.value}))} />
+            <button onClick={addRate} className="btn btn-primary">Add Plan</button>
+          </div><div className="space-y-2">{ratePlans.map(p=><div key={p.id} className="flex justify-between p-3 bg-gray-50 rounded"><span className="font-medium">{p.name} ({p.alias})</span><span className="text-xs text-gray-500">Active</span></div>)}</div></div>}
+          {tab==='segments' && <div className="card"><p className="text-gray-500">Market Segmentation module coming soon.</p></div>}
+          {tab==='articles' && <div className="card"><p className="text-gray-500">Article Payment & Sales configuration coming soon.</p></div>}
+          {tab==='tax_service' && <div className="card"><p className="text-gray-500">Tax & Service configuration coming soon.</p></div>}
+        </div>
+      );
+    }
+
+    // 🏠 LAYOUT
+    function Layout({ children, onLogout }) {
+      const { user, tenant, setView } = useContext(AppContext);
+      const menu = [
+        {id:'dashboard', label:'Dashboard', icon:'📊'},
+        {id:'reservations', label:'Reservations', icon:'📅'},
+        {id:'housekeeping', label:'Housekeeping', icon:'🧹'},
+        {id:'pos', label:'F&B POS', icon:'🍽️'},
+        {id:'settings', label:'Settings', icon:'⚙️'}
+      ];
+      return (
+        <div className="min-h-screen flex flex-col md:flex-row">
+          <aside className="hidden md:flex flex-col w-64 bg-white border-r min-h-screen">
+            <div className="p-6 border-b"><h1 className="text-xl font-bold text-blue-600">New Gates PMS</h1><p className="text-xs text-gray-400 mt-1">{tenant?.name}</p></div>
+            <nav className="flex-1 p-4 space-y-2">{menu.map(m=><button key={m.id} onClick={()=>setView(m.id)} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-blue-50 hover:text-blue-600"><span className="text-lg">{m.icon}</span>{m.label}</button>)}</nav>
+            <div className="p-4 border-t"><button onClick={onLogout} className="w-full btn btn-danger text-xs">Logout</button></div>
+          </aside>
+          <main className="flex-1 p-4 md:p-8 overflow-y-auto pb-20 md:pb-8">{children}</main>
+          <nav className="md:hidden fixed bottom-0 w-full bg-white border-t flex justify-around p-3">{menu.slice(0,4).map(m=><button key={m.id} onClick={()=>setView(m.id)} className="flex flex-col items-center text-xs text-gray-500"><span className="text-xl mb-1">{m.icon}</span>{m.label}</button>)}</nav>
+        </div>
+      );
+    }
+
+    // 🚀 APP
+    function App() {
+      const [session, setSession] = useState(null);
+      const [profile, setProfile] = useState(null);
+      const [tenant, setTenant] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [view, setView] = useState('dashboard');
+      const [toast, setToast] = useState(null);
+      const showToast = (msg,type) => setToast({msg,type});
+
+      useEffect(() => {
+        supabaseClient.auth.getSession().then(({data:{session:s}}) => {
+          if(s) loadUser(s);
+          setLoading(false);
+        });
+        const {data:{subscription}} = supabaseClient.auth.onAuthStateChange((_,s) => s ? loadUser(s) : (setSession(null), setProfile(null), setTenant(null)));
+        return () => subscription.unsubscribe();
+      }, []);
+
+      const loadUser = async s => {
+        setSession(s);
+        const {data:prof} = await supabaseClient.from('profiles').select('tenant_id, role').eq('id', s.user.id).single();
+        if(prof) {
+          setProfile(prof);
+          const {data:t} = await supabaseClient.from('tenants').select('id, name').eq('id', prof.tenant_id).single();
+          if(t) setTenant(t);
+        }
+      };
+
+      const handleLogin = (auth, prof, hotelId) => { setSession(auth); setProfile(prof); };
+      const handleLogout = () => supabaseClient.auth.signOut();
+
+      if(loading) return <div className="flex h-screen items-center justify-center">Loading...</div>;
+      if(!session) return <LoginPage onLogin={handleLogin} />;
+
+      return (
+        <AppContext.Provider value={{user:session.user, profile, tenant, setView}}>
+          <Layout onLogout={handleLogout}>
+            {toast && <Toast msg={toast.msg} type={toast.type} onClose={()=>setToast(null)} />}
+            {view==='dashboard' && <Dashboard showToast={showToast} />}
+            {view==='reservations' && <ReservationList onNew={()=>setView('res_form')} />}
+            {view==='res_form' && <ReservationForm onSave={()=>setView('reservations')} />}
+            {view==='settings' && <Settings showToast={showToast} />}
+            {['housekeeping','pos'].includes(view) && <div className="text-center py-12 text-gray-400">Module coming soon</div>}
+          </Layout>
+        </AppContext.Provider>
+      );
+    }
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
