@@ -4,11 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>👑 New Gates PMS - Super Admin</title>
+  
+  <!-- Load Scripts dengan Urutan Benar -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     body { font-family: 'Inter', sans-serif; background-color: #F8FAFC; color: #1E293B; }
@@ -16,53 +19,53 @@
     .btn { @apply px-4 py-2 rounded-lg font-medium transition text-sm flex items-center gap-2 disabled:opacity-50; }
     .btn-primary { @apply bg-blue-600 text-white hover:bg-blue-700; }
     .btn-outline { @apply border border-gray-300 text-gray-700 hover:bg-gray-50; }
-    .btn-danger { @apply bg-red-50 text-red-600 hover:bg-red-100; }
-    input, select, textarea { @apply w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white; }
-    label { @apply block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide; }
-    .badge { @apply px-2 py-1 rounded-full text-xs font-semibold; }
-    .badge-green { @apply bg-green-100 text-green-800; }
-    .badge-blue { @apply bg-blue-100 text-blue-800; }
-    .badge-yellow { @apply bg-yellow-100 text-yellow-800; }
-    .badge-gray { @apply bg-gray-100 text-gray-800; }
-    table { @apply w-full text-left border-collapse; }
-    th { @apply bg-gray-50 text-gray-600 font-semibold text-xs uppercase p-3 border-b; }
-    td { @apply p-3 border-b text-sm text-gray-700; }
-    tr:hover { @apply bg-gray-50; }
-    .sidebar-item { @apply flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition cursor-pointer; }
-    .sidebar-item:hover { @apply bg-blue-50 text-blue-700; }
-    .sidebar-item.active { @apply bg-blue-600 text-white shadow-md; }
-    .modal-overlay { @apply fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4; }
-    .modal-content { @apply bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6; }
+    input, select { @apply w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500; }
+    label { @apply block text-xs font-semibold text-gray-500 mb-1 uppercase; }
   </style>
 </head>
 <body>
   <div id="root"></div>
 
   <script type="text/babel">
-    // ⚙️ CONFIG
-    const SUPABASE_URL = 'https://eybscqqkusgbfmvvjbbb.supabase.co'; // GANTI URL
-    const SUPABASE_ANON_KEY = 'sb_publishable_fAvutkgsk5UAXnwIz5RSPw_Z2Dk43EP'; // GANTI KEY
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    const { useState, useEffect, useMemo, createContext, useContext } = React;
+    // ⚙️ CONFIG - Pastikan URL & Key diisi
+    const SUPABASE_URL = 'https://eybscqqkusgbfmvvjbbb.supabase.co'; // GANTI DENGAN URL ANDA
+    const SUPABASE_ANON_KEY = 'sb_publishable_fAvutkgsk5UAXnwIz5RSPw_Z2Dk43EP'; // GANTI DENGAN KEY ANDA
+    
+    // Inisialisasi Supabase Client
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const { useState, useEffect, createContext, useContext } = React;
 
     const AppContext = createContext();
-    const formatCurrency = v => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(v || 0);
-    const formatDate = d => d ? new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
 
-    // 🏠 LOGIN
+    // 🏠 LOGIN PAGE
     function LoginPage({ onLogin }) {
       const [email, setEmail] = useState('');
       const [password, setPassword] = useState('');
       const [loading, setLoading] = useState(false);
       const [error, setError] = useState('');
 
-      const handleLogin = async e => {
-        e.preventDefault(); setLoading(true); setError('');
-        const {  auth, error: err } = await supabase.auth.signInWithPassword({ email, password });
-        if (err) setError(err.message);
-        else if (auth.user.app_metadata?.role !== 'super_admin') setError('Access Denied: Super Admin only.');
-        else onLogin(auth);
-        setLoading(false);
+      const handleLogin = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+
+        try {
+          const {  auth, error: err } = await supabase.auth.signInWithPassword({ 
+            email, 
+            password 
+          });
+          
+          if (err) throw err;
+          if (auth.user.app_metadata?.role !== 'super_admin') {
+            throw new Error('Access Denied: Super Admin only');
+          }
+          
+          onLogin(auth);
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
       };
 
       return (
@@ -72,354 +75,140 @@
               <h1 className="text-2xl font-bold text-blue-700">👑 New Gates PMS</h1>
               <p className="text-gray-500 text-sm mt-1">SaaS Super Admin Console</p>
             </div>
-            {error && <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm border border-red-100">{error}</div>}
+            
+            {error && (
+              <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm border border-red-100">
+                {error}
+              </div>
+            )}
+            
             <form onSubmit={handleLogin} className="space-y-4">
-              <div><label>Email</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} required /></div>
-              <div><label>Password</label><input type="password" value={password} onChange={e=>setPassword(e.target.value)} required /></div>
-              <button type="submit" disabled={loading} className="btn btn-primary w-full">{loading ? 'Verifying...' : 'Masuk Panel Utama'}</button>
+              <div>
+                <label>Email</label>
+                <input 
+                  type="email" 
+                  value={email} 
+                  onChange={e => setEmail(e.target.value)} 
+                  placeholder="saas@admin.com"
+                  required 
+                />
+              </div>
+              <div>
+                <label>Password</label>
+                <input 
+                  type="password" 
+                  value={password} 
+                  onChange={e => setPassword(e.target.value)} 
+                  placeholder="••••••••"
+                  required 
+                />
+              </div>
+              <button 
+                type="submit" 
+                disabled={loading} 
+                className="btn btn-primary w-full"
+              >
+                {loading ? 'Verifying...' : 'Masuk Panel Utama'}
+              </button>
             </form>
-            <p className="text-xs text-center text-gray-400 mt-6">Demo: saas@admin.com / AdminSaaS123!</p>
+            
+            <p className="text-xs text-center text-gray-400 mt-6">
+              Demo: saas@admin.com / AdminSaaS123!
+            </p>
           </div>
         </div>
       );
     }
 
-    // 📊 DASHBOARD
+    // 📊 DASHBOARD (Simple)
     function Dashboard() {
-      const [tenants, setTenants] = useState([]);
-      const [bookings, setBookings] = useState([]);
-      const [loading, setLoading] = useState(true);
+      const [stats, setStats] = useState({ tenants: 0, revenue: 0 });
 
       useEffect(() => {
+        // Load stats dari Supabase
         (async () => {
-          const { data: t } = await supabase.from('tenants').select('*');
-          const { data: b } = await supabase.from('reservations').select('guest_name, check_in, check_out, status, total_amount, tenant:tenants(name)').limit(10).order('created_at', { ascending: false });
-          setTenants(t || []);
-          setBookings(b || []);
-          setLoading(false);
+          const {  count } = await supabase.from('tenants').select('*', { count: 'exact', head: true });
+          setStats({ tenants: count || 0, revenue: 0 });
         })();
       }, []);
 
-      const stats = useMemo(() => ({
-        total: tenants.length,
-        active: tenants.filter(t => t.is_active).length,
-        mrr: tenants.reduce((sum, t) => sum + (t.plan === 'enterprise' ? 2500000 : t.plan === 'pro' ? 899000 : 299000), 0),
-        todayRev: bookings.filter(b => b.check_in === new Date().toISOString().split('T')[0]).reduce((s, b) => s + (b.total_amount || 0), 0)
-      }), [tenants, bookings]);
-
       return (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="card p-5"><p className="text-xs font-semibold text-gray-500 uppercase">Total Tenants</p><p className="text-2xl font-bold mt-1">{stats.total}</p></div>
-            <div className="card p-5"><p className="text-xs font-semibold text-gray-500 uppercase">Active Subscriptions</p><p className="text-2xl font-bold text-green-600 mt-1">{stats.active}</p></div>
-            <div className="card p-5"><p className="text-xs font-semibold text-gray-500 uppercase">MRR (Est.)</p><p className="text-2xl font-bold text-blue-600 mt-1">{formatCurrency(stats.mrr)}</p></div>
-            <div className="card p-5"><p className="text-xs font-semibold text-gray-500 uppercase">Forecast Today</p><p className="text-2xl font-bold text-purple-600 mt-1">{formatCurrency(stats.todayRev)}</p></div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 card p-5">
-              <h3 className="font-bold text-gray-800 mb-4">Last 30 Days Revenue</h3>
-              <div className="h-48 bg-gray-50 rounded-lg flex items-center justify-center text-gray-400 text-sm">
-                📊 Chart Component (Integrate Recharts/Chart.js here)
-              </div>
-              <div className="flex gap-2 mt-4">
-                <button className="btn btn-outline text-xs">Last 30 Days</button>
-                <select className="w-auto text-xs border rounded px-2 py-1"><option>This Month</option><option>Last Month</option></select>
-              </div>
-            </div>
-
+          <h2 className="text-2xl font-bold text-gray-800">Dashboard</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="card p-5">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-gray-800">Recent Bookings</h3>
-                <button className="text-xs text-blue-600 font-semibold">See All</button>
-              </div>
-              <div className="space-y-3 max-h-64 overflow-y-auto">
-                {loading ? <p className="text-gray-400 text-sm">Loading...</p> : bookings.map((b, i) => (
-                  <div key={i} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="font-medium text-sm">{b.guest_name}</p>
-                      <p className="text-xs text-gray-500">{b.tenant?.name || 'Unknown Hotel'}</p>
-                    </div>
-                    <span className={`badge ${b.status === 'checked_in' ? 'badge-green' : 'badge-blue'}`}>{b.status}</span>
-                  </div>
-                ))}
-              </div>
+              <p className="text-xs font-semibold text-gray-500 uppercase">Total Tenants</p>
+              <p className="text-2xl font-bold mt-1 text-blue-600">{stats.tenants}</p>
             </div>
-          </div>
-
-          <div className="card p-5">
-            <h3 className="font-bold text-gray-800 mb-4">Channel Manager Status</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {['Traveloka', 'Agoda', 'Booking.com', 'Tiket.com'].map(ota => (
-                <div key={ota} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                  <span className="font-medium text-sm">{ota}</span>
-                  <span className="badge badge-green">Connected</span>
-                </div>
-              ))}
+            <div className="card p-5">
+              <p className="text-xs font-semibold text-gray-500 uppercase">Active Subscriptions</p>
+              <p className="text-2xl font-bold mt-1 text-green-600">0</p>
+            </div>
+            <div className="card p-5">
+              <p className="text-xs font-semibold text-gray-500 uppercase">System Status</p>
+              <p className="text-2xl font-bold mt-1 text-emerald-600">Online</p>
             </div>
           </div>
         </div>
       );
     }
 
-    // 🏢 TENANT MANAGEMENT
-    function TenantManagement() {
-      const [tenants, setTenants] = useState([]);
-      const [showForm, setShowForm] = useState(false);
-      const [form, setForm] = useState({ name: '', plan: 'starter', contact: '', status: 'active' });
-
-      useEffect(() => {
-        supabase.from('tenants').select('*').order('created_at', { ascending: false }).then(({ data }) => setTenants(data || []));
-      }, []);
-
-      const handleSubmit = async e => {
-        e.preventDefault();
-        const { error } = await supabase.from('tenants').insert([form]);
-        if (!error) { setShowForm(false); setForm({ name: '', plan: 'starter', contact: '', status: 'active' }); }
-      };
-
-      return (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold text-gray-800">Manajemen Klien (Tenants)</h2>
-            <button onClick={() => setShowForm(true)} className="btn btn-primary">+ Klien Baru</button>
-          </div>
-
-          <div className="card overflow-hidden">
-            <table>
-              <thead><tr><th>Nama Klien</th><th>Plan</th><th>Kontak</th><th>Status</th><th>Masa Aktif</th><th>Aksi</th></tr></thead>
-              <tbody>
-                {tenants.map(t => (
-                  <tr key={t.id}>
-                    <td className="font-medium">{t.name}</td>
-                    <td><span className="badge badge-blue">{t.plan}</span></td>
-                    <td>{t.contact || '-'}</td>
-                    <td><span className={`badge ${t.is_active ? 'badge-green' : 'badge-gray'}`}>{t.is_active ? 'Active' : 'Inactive'}</span></td>
-                    <td>{formatDate(t.created_at)}</td>
-                    <td className="flex gap-2">
-                      <button className="text-blue-600 hover:underline text-xs">Edit</button>
-                      <button className="text-red-600 hover:underline text-xs">Suspend</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {showForm && (
-            <div className="modal-overlay" onClick={() => setShowForm(false)}>
-              <div className="modal-content" onClick={e => e.stopPropagation()}>
-                <h3 className="text-lg font-bold mb-4">Registrasi Klien Baru</h3>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div><label>Nama Organisasi</label><input value={form.name} onChange={e=>setForm({...form, name:e.target.value})} required /></div>
-                    <div><label>Client Code</label><input value={form.contact} onChange={e=>setForm({...form, contact:e.target.value})} placeholder="Custom Code" /></div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div><label>Paket SaaS</label><select value={form.plan} onChange={e=>setForm({...form, plan:e.target.value})}><option value="starter">Starter</option><option value="pro">Pro</option><option value="enterprise">Enterprise</option></select></div>
-                    <div><label>Status</label><select value={form.status} onChange={e=>setForm({...form, status:e.target.value})}><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
-                  </div>
-                  <div className="flex justify-end gap-3 pt-4 border-t">
-                    <button type="button" onClick={() => setShowForm(false)} className="btn btn-outline">Batal</button>
-                    <button type="submit" className="btn btn-primary">Buat Klien</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // 👥 USER CONFIGURATION
-    function UserConfiguration() {
-      const [activeTab, setActiveTab] = useState('roles');
-      const tabs = [
-        { id: 'roles', label: 'Role Management' },
-        { id: 'userroles', label: 'User Role Assignment' },
-        { id: 'modules', label: 'Module Configuration' },
-        { id: 'menus', label: 'Menu Configuration' }
-      ];
-
-      return (
-        <div className="space-y-4">
-          <h2 className="text-xl font-bold text-gray-800">User Configuration</h2>
-          <div className="flex border-b gap-2">
-            {tabs.map(t => (
-              <button key={t.id} onClick={() => setActiveTab(t.id)} className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>{t.label}</button>
-            ))}
-          </div>
-          <div className="card p-5">
-            {activeTab === 'roles' && (
-              <div>
-                <div className="flex justify-between mb-4"><h3 className="font-semibold">Role List</h3><button className="btn btn-primary text-xs">+ Create Role</button></div>
-                <table><thead><tr><th>Role Name</th><th>Permissions</th><th>Tenant</th><th>Status</th></tr></thead>
-                <tbody>
-                  <tr><td className="font-medium">super_admin</td><td><span className="badge badge-blue">Full Access</span></td><td>Platform</td><td><span className="badge badge-green">Active</span></td></tr>
-                  <tr><td className="font-medium">hotel_admin</td><td><span className="badge badge-blue">Hotel Full</span></td><td>Tenant-Specific</td><td><span className="badge badge-green">Active</span></td></tr>
-                  <tr><td className="font-medium">manager</td><td><span className="badge badge-yellow">Approval & Reports</span></td><td>Tenant-Specific</td><td><span className="badge badge-green">Active</span></td></tr>
-                </tbody></table>
-              </div>
-            )}
-            {activeTab === 'userroles' && <div className="text-center py-8 text-gray-500">User Role Assignment table will load here. (CRUD profiles ↔ roles)</div>}
-            {activeTab === 'modules' && <div className="text-center py-8 text-gray-500">Module Configuration table will load here. (Enable/Disable modules per tenant)</div>}
-            {activeTab === 'menus' && <div className="text-center py-8 text-gray-500">Menu Configuration tree will load here. (Parent/Child menu ordering)</div>}
-          </div>
-        </div>
-      );
-    }
-
-    // 💳 SUBSCRIPTION CONFIG
-    function SubscriptionConfig() {
-      const [activeTab, setActiveTab] = useState('plans');
-      const plans = [
-        { name: 'Starter', price: 299000, rooms: 20, features: 'Basic Front Office' },
-        { name: 'Pro', price: 899000, rooms: 100, features: 'Full PMS + F&B POS' },
-        { name: 'Enterprise', price: 2500000, rooms: 'Unlimited', features: 'All Modules + API' }
-      ];
-
-      return (
-        <div className="space-y-4">
-          <h2 className="text-xl font-bold text-gray-800">Subscription Configuration</h2>
-          <div className="flex border-b gap-2">
-            {['plans', 'cart', 'payments'].map(t => (
-              <button key={t} onClick={() => setActiveTab(t)} className={`px-4 py-2 text-sm font-medium border-b-2 capitalize ${activeTab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>{t} Management</button>
-            ))}
-          </div>
-          <div className="card p-5">
-            {activeTab === 'plans' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {plans.map((p, i) => (
-                  <div key={i} className="border border-gray-200 rounded-lg p-4 flex flex-col">
-                    <h3 className="font-bold text-lg">{p.name}</h3>
-                    <p className="text-2xl font-bold text-blue-600 my-2">{formatCurrency(p.price)}<span className="text-sm text-gray-500 font-normal">/month</span></p>
-                    <p className="text-sm text-gray-600 mb-4">{p.features}</p>
-                    <p className="text-xs text-gray-500 mb-4">Max Rooms: {p.rooms}</p>
-                    <div className="mt-auto flex gap-2">
-                      <button className="btn btn-outline flex-1 text-xs">Edit</button>
-                      <button className="btn btn-danger flex-1 text-xs">Delete</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {activeTab === 'cart' && <div className="text-center py-8 text-gray-500">Cart configuration & hotel upgrade requests will appear here.</div>}
-            {activeTab === 'payments' && <div className="text-center py-8 text-gray-500">Approved payment logs & invoice generation will appear here.</div>}
-          </div>
-        </div>
-      );
-    }
-
-    // 📈 REPORTS & LOGS
-    function ReportsAndLogs() {
-      const [activeTab, setActiveTab] = useState('logs');
-      
-      return (
-        <div className="space-y-4">
-          <h2 className="text-xl font-bold text-gray-800">Reports & Audit Logs</h2>
-          <div className="flex border-b gap-2 flex-wrap">
-            {['logs', 'subscription', 'sales', 'cost'].map(t => (
-              <button key={t} onClick={() => setActiveTab(t)} className={`px-4 py-2 text-sm font-medium border-b-2 capitalize ${activeTab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>{t} Report</button>
-            ))}
-          </div>
-          <div className="card p-5">
-            {activeTab === 'logs' && (
-              <div>
-                <div className="flex gap-3 mb-4">
-                  <select className="w-auto"><option>Semua Klien</option><option>Grand Horizon</option></select>
-                  <input type="date" className="w-auto" />
-                  <button className="btn btn-outline">Refresh</button>
-                  <button className="btn btn-outline">Export CSV</button>
-                </div>
-                <table><thead><tr><th>Timestamp</th><th>Klien</th><th>Aktor</th><th>Aksi</th><th>Detail</th></tr></thead>
-                <tbody>
-                  <tr><td>2024-10-25 14:30</td><td>Grand Horizon</td><td>admin@gh.com</td><td>Reservation Created</td><td>Guest: Budi S.</td></tr>
-                  <tr><td>2024-10-25 14:25</td><td>Grand Horizon</td><td>system</td><td>Auto-Post Room Charge</td><td>Night Audit Batch</td></tr>
-                </tbody></table>
-              </div>
-            )}
-            {activeTab !== 'logs' && <div className="text-center py-8 text-gray-500">{activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Report generator will load here.</div>}
-          </div>
-        </div>
-      );
-    }
-
-    // 🧭 LAYOUT
-    function Layout({ children, onLogout }) {
-      const { setView, view } = useContext(AppContext);
-      const menu = [
-        { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-        { id: 'tenants', label: 'Manajemen Klien', icon: '🏢' },
-        { id: 'users', label: 'User Configuration', icon: '👥' },
-        { id: 'subscription', label: 'Subscription & Billing', icon: '💳' },
-        { id: 'reports', label: 'Reports & Logs', icon: '📈' },
-        { id: 'settings', label: 'System Settings', icon: '⚙️' }
-      ];
-
-      return (
-        <div className="min-h-screen flex flex-col md:flex-row">
-          <aside className="hidden md:flex flex-col w-64 bg-slate-900 text-white min-h-screen sticky top-0">
-            <div className="p-6 border-b border-slate-700">
-              <h1 className="text-xl font-bold text-blue-400">👑 New Gates</h1>
-              <p className="text-xs text-slate-400 mt-1">SaaS Super Admin</p>
-            </div>
-            <nav className="flex-1 p-4 space-y-1">
-              {menu.map(m => (
-                <button key={m.id} onClick={() => setView(m.id)} className={`sidebar-item w-full ${view === m.id ? 'active' : 'text-slate-300'}`}>
-                  <span className="text-lg">{m.icon}</span> {m.label}
-                </button>
-              ))}
-            </nav>
-            <div className="p-4 border-t border-slate-700">
-              <button onClick={onLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-red-400 hover:bg-slate-800">
-                🚪 Keluar Sistem
-              </button>
-            </div>
-          </aside>
-
-          <main className="flex-1 p-4 md:p-8 overflow-y-auto pb-20 md:pb-8">
-            {children}
-          </main>
-
-          <nav className="md:hidden fixed bottom-0 w-full bg-white border-t flex justify-around p-3 z-10">
-            {menu.slice(0, 4).map(m => (
-              <button key={m.id} onClick={() => setView(m.id)} className="flex flex-col items-center text-xs text-gray-600">
-                <span className="text-xl mb-1">{m.icon}</span> {m.label.split(' ')[0]}
-              </button>
-            ))}
-          </nav>
-        </div>
-      );
-    }
-
-    // 🚀 APP
+    // 🚀 MAIN APP
     function App() {
       const [session, setSession] = useState(null);
-      const [view, setView] = useState('dashboard');
       const [loading, setLoading] = useState(true);
 
       useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session: s } }) => {
-          if (s?.user?.app_metadata?.role === 'super_admin') setSession(s);
+        // Check session saat mount
+        supabase.auth.getSession().then(({  { session: s } }) => {
+          if (s?.user?.app_metadata?.role === 'super_admin') {
+            setSession(s);
+          }
           setLoading(false);
         });
+
+        // Listen auth changes
+        const {  { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+          if (s?.user?.app_metadata?.role === 'super_admin') {
+            setSession(s);
+          } else {
+            setSession(null);
+          }
+        });
+
+        return () => subscription.unsubscribe();
       }, []);
 
-      const handleLogout = () => supabase.auth.signOut().then(() => setSession(null));
+      const handleLogout = () => {
+        supabase.auth.signOut().then(() => setSession(null));
+      };
 
-      if (loading) return <div className="flex h-screen items-center justify-center">Loading Admin Console...</div>;
-      if (!session) return <LoginPage onLogin={s => setSession(s)} />;
+      if (loading) {
+        return (
+          <div className="flex h-screen items-center justify-center bg-gray-50">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading Admin Console...</p>
+            </div>
+          </div>
+        );
+      }
+
+      if (!session) {
+        return <LoginPage onLogin={s => setSession(s)} />;
+      }
 
       return (
-        <AppContext.Provider value={{ session, view, setView }}>
-          <Layout onLogout={handleLogout}>
-            {view === 'dashboard' && <Dashboard />}
-            {view === 'tenants' && <TenantManagement />}
-            {view === 'users' && <UserConfiguration />}
-            {view === 'subscription' && <SubscriptionConfig />}
-            {view === 'reports' && <ReportsAndLogs />}
-            {view === 'settings' && <div className="text-center py-12 text-gray-500">System Settings module coming soon.</div>}
-          </Layout>
+        <AppContext.Provider value={{ session }}>
+          <div className="min-h-screen">
+            <header className="bg-white border-b p-4 flex justify-between items-center">
+              <h1 className="text-xl font-bold text-blue-700">👑 New Gates Super Admin</h1>
+              <button onClick={handleLogout} className="btn btn-outline">Logout</button>
+            </header>
+            <main className="p-6">
+              <Dashboard />
+            </main>
+          </div>
         </AppContext.Provider>
       );
     }
