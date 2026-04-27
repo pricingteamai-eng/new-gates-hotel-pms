@@ -42,7 +42,8 @@
     // ⚙️ CONFIG
     const SUPABASE_URL = 'https://eybscqqkusgbfmvvjbbb.supabase.co'; // GANTI URL
     const SUPABASE_ANON_KEY = 'sb_publishable_fAvutkgsk5UAXnwIz5RSPw_Z2Dk43EP'; // GANTI KEY
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const { createClient } = supabase;
+    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const { useState, useEffect, useMemo, createContext, useContext } = React;
 
     const AppContext = createContext();
@@ -58,11 +59,17 @@
 
       const handleLogin = async e => {
         e.preventDefault(); setLoading(true); setError('');
-        const {  auth, error: err } = await supabase.auth.signInWithPassword({ email, password });
-        if (err) setError(err.message);
-        else if (auth.user.app_metadata?.role !== 'super_admin') setError('Access Denied: Super Admin only.');
-        else onLogin(auth);
-        setLoading(false);
+        try {
+          const { data, error: err } = await supabaseClient.auth.signInWithPassword({ email, password });
+          if (err) throw err;
+          const { data: prof, error: profErr } = await supabaseClient.from('profiles').select('role').eq('id', data.user.id).single();
+          if (profErr || prof.role !== 'super_admin') throw new Error('Access Denied: Super Admin only.');
+          onLogin(data);
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
       };
 
       return (
@@ -92,8 +99,8 @@
 
       useEffect(() => {
         (async () => {
-          const { data: t } = await supabase.from('tenants').select('*');
-          const { data: b } = await supabase.from('reservations').select('guest_name, check_in, check_out, status, total_amount, tenant:tenants(name)').limit(10).order('created_at', { ascending: false });
+          const { data: t } = await supabaseClient.from('tenants').select('*');
+          const { data: b } = await supabaseClient.from('reservations').select('guest_name, check_in, check_out, status, total_amount, tenant:tenants(name)').limit(10).order('created_at', { ascending: false });
           setTenants(t || []);
           setBookings(b || []);
           setLoading(false);
@@ -169,12 +176,12 @@
       const [form, setForm] = useState({ name: '', plan: 'starter', contact: '', status: 'active' });
 
       useEffect(() => {
-        supabase.from('tenants').select('*').order('created_at', { ascending: false }).then(({ data }) => setTenants(data || []));
+        supabaseClient.from('tenants').select('*').order('created_at', { ascending: false }).then(({ data }) => setTenants(data || []));
       }, []);
 
       const handleSubmit = async e => {
         e.preventDefault();
-        const { error } = await supabase.from('tenants').insert([form]);
+        const { error } = await supabaseClient.from('tenants').insert([form]);
         if (!error) { setShowForm(false); setForm({ name: '', plan: 'starter', contact: '', status: 'active' }); }
       };
 
@@ -395,17 +402,29 @@
     // 🚀 APP
     function App() {
       const [session, setSession] = useState(null);
+      const [profile, setProfile] = useState(null);
       const [view, setView] = useState('dashboard');
       const [loading, setLoading] = useState(true);
 
       useEffect(() => {
-        supabase.auth.getSession().then(({  { session: s } }) => {
-          if (s?.user?.app_metadata?.role === 'super_admin') setSession(s);
-          setLoading(false);
+        supabaseClient.auth.getSession().then(({ data: { session: s } }) => {
+          if (s) loadUser(s);
+          else setLoading(false);
         });
+        const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((_, s) => s ? loadUser(s) : (setSession(null), setProfile(null)));
+        return () => subscription.unsubscribe();
       }, []);
 
-      const handleLogout = () => supabase.auth.signOut().then(() => setSession(null));
+      const loadUser = async s => {
+        const { data: prof } = await supabaseClient.from('profiles').select('role').eq('id', s.user.id).single();
+        if (prof && prof.role === 'super_admin') {
+          setSession(s);
+          setProfile(prof);
+        }
+        setLoading(false);
+      };
+
+      const handleLogout = () => supabaseClient.auth.signOut().then(() => setSession(null));
 
       if (loading) return <div className="flex h-screen items-center justify-center">Loading Admin Console...</div>;
       if (!session) return <LoginPage onLogin={s => setSession(s)} />;
