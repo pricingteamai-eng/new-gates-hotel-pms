@@ -399,7 +399,7 @@
       const [loading, setLoading] = useState(true);
 
       useEffect(() => {
-        supabase.auth.getSession().then(({  { session: s } }) => {
+        supabase.auth.getSession().then(({ data: { session: s } }) => {
           if (s?.user?.app_metadata?.role === 'super_admin') setSession(s);
           setLoading(false);
         });
